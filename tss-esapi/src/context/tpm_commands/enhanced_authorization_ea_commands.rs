@@ -3,14 +3,14 @@
 use crate::{
     attributes::LocalityAttributes,
     constants::CommandCode,
-    handles::{AuthHandle, ObjectHandle, SessionHandle},
+    handles::{AuthHandle, NvIndexHandle, ObjectHandle, SessionHandle},
     interface_types::{session_handles::PolicySession, YesNo},
     structures::{
         AuthTicket, Digest, DigestList, Name, Nonce, PcrSelectionList, Signature, Timeout,
         VerifiedTicket,
     },
     tss2_esys::{
-        Esys_PolicyAuthValue, Esys_PolicyAuthorize, Esys_PolicyCommandCode, Esys_PolicyCpHash,
+        Esys_PolicyAuthValue, Esys_PolicyAuthorize, Esys_PolicyAuthorizeNV, Esys_PolicyCommandCode, Esys_PolicyCpHash,
         Esys_PolicyDuplicationSelect, Esys_PolicyGetDigest, Esys_PolicyLocality,
         Esys_PolicyNameHash, Esys_PolicyNvWritten, Esys_PolicyOR, Esys_PolicyPCR,
         Esys_PolicyPassword, Esys_PolicyPhysicalPresence, Esys_PolicySecret, Esys_PolicySigned,
@@ -475,6 +475,42 @@ impl Context {
             Ok(())
         } else {
             error!("Error when computing policy authorize: {}", ret);
+            Err(ret)
+        }
+    }
+
+    /// Cause conditional gating of a policy based on the contents of an NV Index.
+    ///
+    /// The TPM checks the current policy session's `policyDigest` against the value
+    /// stored in the NV Index and, on a match, replaces the session digest with the
+    /// PolicyAuthorizeNV term. This lets a sealed object follow a policy that lives in
+    /// an NV Index (e.g. a systemd-pcrlock index, which holds the currently-valid PCR
+    /// policy and is re-predicted across firmware updates) without resealing the object.
+    ///
+    /// `auth_handle` authorizes reading the NV Index (often the index itself when it
+    /// carries an index-authorized policy). `nv_index_handle` is the Index to read.
+    pub fn policy_authorize_nv(
+        &mut self,
+        policy_session: PolicySession,
+        auth_handle: AuthHandle,
+        nv_index_handle: NvIndexHandle,
+    ) -> Result<()> {
+        let ret = unsafe {
+            Esys_PolicyAuthorizeNV(
+                self.mut_context(),
+                auth_handle.into(),
+                nv_index_handle.into(),
+                SessionHandle::from(policy_session).into(),
+                self.optional_session_1(),
+                self.optional_session_2(),
+                self.optional_session_3(),
+            )
+        };
+        let ret = Error::from_tss_rc(ret);
+        if ret.is_success() {
+            Ok(())
+        } else {
+            error!("Error when computing policy authorize NV: {}", ret);
             Err(ret)
         }
     }
