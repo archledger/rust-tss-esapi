@@ -4,7 +4,7 @@ use crate::{
     attributes::LocalityAttributes,
     constants::CommandCode,
     handles::{AuthHandle, NvIndexHandle, ObjectHandle, SessionHandle},
-    interface_types::{session_handles::PolicySession, YesNo},
+    interface_types::{resource_handles::NvAuth, session_handles::PolicySession, YesNo},
     structures::{
         AuthTicket, Digest, DigestList, Name, Nonce, PcrSelectionList, Signature, Timeout,
         VerifiedTicket,
@@ -492,13 +492,13 @@ impl Context {
     pub fn policy_authorize_nv(
         &mut self,
         policy_session: PolicySession,
-        auth_handle: AuthHandle,
+        auth_handle: NvAuth,
         nv_index_handle: NvIndexHandle,
     ) -> Result<()> {
         let ret = unsafe {
             Esys_PolicyAuthorizeNV(
                 self.mut_context(),
-                auth_handle.into(),
+                AuthHandle::from(auth_handle).into(),
                 nv_index_handle.into(),
                 SessionHandle::from(policy_session).into(),
                 self.optional_session_1(),
