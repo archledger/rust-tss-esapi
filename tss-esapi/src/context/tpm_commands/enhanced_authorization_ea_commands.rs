@@ -10,8 +10,8 @@ use crate::{
         VerifiedTicket,
     },
     tss2_esys::{
-        Esys_PolicyAuthValue, Esys_PolicyAuthorize, Esys_PolicyAuthorizeNV, Esys_PolicyCommandCode, Esys_PolicyCpHash,
-        Esys_PolicyDuplicationSelect, Esys_PolicyGetDigest, Esys_PolicyLocality,
+        Esys_PolicyAuthValue, Esys_PolicyAuthorize, Esys_PolicyAuthorizeNV, Esys_PolicyCommandCode,
+        Esys_PolicyCpHash, Esys_PolicyDuplicationSelect, Esys_PolicyGetDigest, Esys_PolicyLocality,
         Esys_PolicyNameHash, Esys_PolicyNvWritten, Esys_PolicyOR, Esys_PolicyPCR,
         Esys_PolicyPassword, Esys_PolicyPhysicalPresence, Esys_PolicySecret, Esys_PolicySigned,
         Esys_PolicyTemplate,
