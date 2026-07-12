@@ -5,7 +5,7 @@ use std::io::{ErrorKind, Seek, SeekFrom, Write};
 use tss_esapi::{
     abstraction::nv,
     attributes::NvIndexAttributesBuilder,
-    handles::{NvIndexHandle, NvIndexTpmHandle},
+    handles::NvIndexTpmHandle,
     interface_types::{
         algorithm::HashingAlgorithm,
         resource_handles::{NvAuth, Provision},
