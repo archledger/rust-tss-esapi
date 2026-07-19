@@ -1,0 +1,106 @@
+# Fork-specific guard for the irlume-patches branch. The inherited
+# Continuous Integration / Nightly Checks workflows already build the crate and
+# run the integration tests (including test_policy_authorize_nv) against the IBM
+# software TPM simulator inside Docker. This workflow adds the two things that
+# CI cannot see: that the branch is still "v7.7.0 + our two documented patches"
+# and nothing else, and a signal for when a stable upstream release makes the
+# fork unnecessary.
+name: irlume-patches guard
+
+on:
+  push:
+    branches: [irlume-patches]
+  pull_request:
+    branches: [irlume-patches]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC: retirement check
+  workflow_dispatch:
+
+# Read-only: every job only checks out the repo or queries a public API.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scope-guard:
+    name: Diff-scope vs tss-esapi-7.7.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Actions pinned to a commit SHA (tag in the comment) so a moved tag
+      # cannot change what runs.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0 # need the tss-esapi-7.7.0 tag and full history
+      - name: Assert only the documented library/test files differ from v7.7.0
+        run: |
+          set -euo pipefail
+          # The exact set of source + test files our two patches touch. A change
+          # to any other file under tss-esapi/src or tss-esapi/tests means scope
+          # creep, so fail. Non-library files (README, .github, top-level) are
+          # intentionally not policed here.
+          allow='^(tss-esapi/src/abstraction/ak\.rs|tss-esapi/src/context\.rs|tss-esapi/src/context/tpm_commands/enhanced_authorization_ea_commands\.rs|tss-esapi/tests/integration_tests/abstraction_tests/nv_tests\.rs|tss-esapi/tests/integration_tests/common/mod\.rs|tss-esapi/tests/integration_tests/context_tests/tpm_commands/enhanced_authorization_ea_commands_tests\.rs)$'
+          changed=$(git diff --name-only tss-esapi-7.7.0 HEAD -- tss-esapi/src tss-esapi/tests)
+          echo "Library/test files changed vs v7.7.0:"
+          echo "${changed:-<none>}"
+          bad=$(echo "$changed" | grep -vE "$allow" || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Unexpected library/test change vs v7.7.0 (scope creep):"
+            echo "$bad"
+            exit 1
+          fi
+          echo "Scope OK: only the two documented patches (policy_authorize_nv + PR #530) and their tests differ."
+
+  build:
+    name: Build crate + compile patch tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install tpm2-tss link libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libtss2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master @ 2026-07-16
+        with:
+          toolchain: "1.85.0" # the branch MSRV (env MSRV in ci.yml)
+          components: rustfmt, clippy
+      - name: Format check
+        run: cargo fmt -p tss-esapi -- --check
+      - name: Clippy (warnings are errors)
+        run: cargo clippy -p tss-esapi --all-targets -- -D warnings
+      - name: Build
+        run: cargo build -p tss-esapi
+      # Compile the integration tests (which include test_policy_authorize_nv)
+      # without running them: execution needs a live TPM, which the inherited
+      # Docker CI provides. This proves the patched code and its tests still
+      # typecheck under the MSRV toolchain on a plain runner.
+      - name: Compile integration tests
+        run: cargo test -p tss-esapi --no-run
+
+  retirement-watch:
+    name: Detect stable release carrying our patches
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if a stable tss-esapi >= 8.0.0 is published
+        run: |
+          set -euo pipefail
+          # Both patches (PR #486, PR #530) are already in the 8.0 alphas, so the
+          # first stable >= 8.0.0 is the retire-the-fork signal: switch irlume
+          # back to the crates.io release. Caveat: if upstream instead backports
+          # them into a stable 7.x point release first, add a 7.x check here.
+          latest=$(curl -sSf https://crates.io/api/v1/crates/tss-esapi \
+            | jq -r '.versions[] | select(.yanked==false) | .num' \
+            | grep -Ev -- '-(alpha|beta|rc)' | sort -V | tail -1)
+          echo "Latest stable tss-esapi on crates.io: $latest"
+          major=$(echo "$latest" | cut -d. -f1)
+          if [ "$major" -ge 8 ]; then
+            echo "::error::Stable tss-esapi $latest is published. It carries PR #486 + PR #530; this fork can likely be retired. Point irlume back at the crates.io release after a HW TPM round-trip."
+            exit 1
+          fi
+          echo "Still no stable 8.x release; the fork remains necessary."
