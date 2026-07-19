@@ -6,6 +6,14 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+# Read-only token: these jobs run audits/coverage and do not write to the repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # This won't build on GA environment because of missing TSS
   # libraries. To be reactivated later or to pass using Docker.
@@ -13,10 +21,13 @@ jobs:
     name: Check for unused dependencies
     if: false
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v2
+      # Actions pinned to a commit SHA (tag in the comment) so a moved tag
+      # cannot change what runs.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install latest Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master @ 2026-07-16
         with:
           toolchain: nightly
       - name: Fetch submodules
@@ -29,10 +40,11 @@ jobs:
   audit:
     name: Check for crates with security vulnerabilities
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install latest Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # master @ 2026-07-16
         with:
           toolchain: nightly
       - name: Install cargo audit
@@ -43,8 +55,9 @@ jobs:
   coverage:
     name: Calculate code coverage and cross compile
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t ubuntucontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-ubuntu
       - name: Run the code coverage script

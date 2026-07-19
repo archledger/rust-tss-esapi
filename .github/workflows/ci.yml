@@ -2,6 +2,16 @@ name: Continuous Integration
 
 on: [push, pull_request]
 
+# Read-only token: every job checks out the repo and runs Docker-based tests;
+# nothing here writes to the repo or publishes.
+permissions:
+  contents: read
+
+# A newer push to the same ref cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   MSRV: "1.85.0"
 
@@ -11,9 +21,12 @@ jobs:
   check-spelling:
     name: Check spelling
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check spelling
-        uses: codespell-project/actions-codespell@master
+        # Actions pinned to a commit SHA (tag in the comment) so a moved tag
+        # cannot change what runs.
+        uses: codespell-project/actions-codespell@8f01853be192eb0f849a5c7d721450e7a467c579 # v2.2
         with:
           ignore_words_list: "crate,daa,keypair,AcSend"
           path: tss-esapi
@@ -22,16 +35,18 @@ jobs:
   formatting:
     name: Check formatting
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Check formatting
         run: cargo fmt --all -- --check
-  # Check that it builds with the Minimum Supported Rust Version      
+  # Check that it builds with the Minimum Supported Rust Version
   msrv:
     name: Check minimum supported rust version (MSRV)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t ubuntucontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-ubuntu
       - name: Run the container
@@ -41,8 +56,9 @@ jobs:
   tests-ubuntu:
     name: Ubuntu tests
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t ubuntucontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-ubuntu
       - name: Run the container
@@ -53,8 +69,9 @@ jobs:
   tests-ubuntu-v3:
     name: Ubuntu tests on v3.x.y of tpm2-tss
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t ubuntucontainer tss-esapi/tests/ --build-arg TPM2_TSS_VERSION=3.0.4 --file tss-esapi/tests/Dockerfile-ubuntu
       - name: Run the container
@@ -64,8 +81,9 @@ jobs:
     name: Fedora tests
     # We just build a container... GitHub doesn't like Fedora :(
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t fedoracontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-fedora
       - name: Run the tests
@@ -75,8 +93,9 @@ jobs:
     name: Fedora rawhide tests
     # We just build a container... GitHub doesn't like Fedora :(
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t fedoracontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-fedora-rawhide
       - name: Run the tests
@@ -85,8 +104,9 @@ jobs:
   tests-valgrind:
     name: Valgrind test run
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t ubuntucontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-ubuntu
       - name: Run the tests
@@ -96,8 +116,9 @@ jobs:
   docs:
     name: Check documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t ubuntucontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-ubuntu
       - name: Check documentation
@@ -107,8 +128,9 @@ jobs:
   clippy:
     name: Check Clippy lints
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build the container
         run: docker build -t ubuntucontainer tss-esapi/tests/ --file tss-esapi/tests/Dockerfile-ubuntu  --target tpm2-tss
       - name: Check Clippy lints MSRV
